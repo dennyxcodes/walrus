@@ -12,8 +12,8 @@ use rocksdb::{DB, Options as RocksdbOptions, ReadOptions};
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 use sui_types::base_types::ObjectID;
-use typed_store::rocks::be_fix_int_ser;
-use walrus_core::{
+use typed_store::rocks::{be_fix_int_ser, default_db_options};
+use walrus_core::
     BlobId,
     Epoch,
     ShardIndex,
@@ -310,7 +310,7 @@ impl DbToolCommands {
 }
 
 fn repair_db(db_path: PathBuf) -> Result<()> {
-    let mut opts = RocksdbOptions::default();
+    let mut opts = default_db_options().options;
     opts.create_if_missing(true);
     opts.set_max_open_files(512_000);
     DB::repair(&opts, db_path).map_err(Into::into)
@@ -475,17 +475,13 @@ fn count_certified_blobs(db_path: PathBuf, epoch: Epoch) -> Result<()> {
 
 /// Drop a column family from the RocksDB database.
 fn drop_column_families(db_path: PathBuf, column_family_names: Vec<String>) -> Result<()> {
-    let db = DB::open_cf(
-        &RocksdbOptions::default(),
-        &db_path,
-        &DB::list_cf(&RocksdbOptions::default(), &db_path)?,
-    )
-    .inspect_err(|_| {
-        println!(
-            "failed to open database; \
-            make sure to stop the storage node before attempting to drop column families"
-        )
-    })?;
+    let opts = default_db_options().options;
+    let db = DB::open_cf(&opts, &db_path, &DB::list_cf(&opts, &db_path)?)
+        .inspect_err(|_| {
+            println!(
+                "failed to open database; \n                make sure to stop the storage node before attempting to drop column families"
+            )
+        })?;
 
     for column_family_name in column_family_names {
         println!("Dropping column family: {column_family_name}");
@@ -499,7 +495,8 @@ fn drop_column_families(db_path: PathBuf, column_family_names: Vec<String>) -> R
 }
 
 fn list_column_families(db_path: PathBuf) -> Result<()> {
-    let result = rocksdb::DB::list_cf(&RocksdbOptions::default(), db_path);
+    let opts = default_db_options().options;
+    let result = rocksdb::DB::list_cf(&opts, db_path);
     if let Ok(column_families) = result {
         println!("Column families: {column_families:?}");
     } else {
@@ -508,6 +505,7 @@ fn list_column_families(db_path: PathBuf) -> Result<()> {
 
     Ok(())
 }
+
 
 fn read_blob_metadata(
     db_path: PathBuf,
